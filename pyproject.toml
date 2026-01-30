@@ -54,7 +54,7 @@ dependencies = [
     "pydantic",
     "python-dotenv",
     "pydantic_settings",
-    "litellm",
+    "litellm @ git+https://github.com/lurf21/litellm.git@patch",
     "GitPython",
     "ghapi",
     "swe-rex @ git+https://github.com/lurf21/SWE-ReX.git@patch",
