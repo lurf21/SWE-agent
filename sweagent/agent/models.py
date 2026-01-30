@@ -66,9 +66,9 @@ def count_token_num(messages: list[dict[str, str]], tokenizer: AutoTokenizer) ->
                 reasoning_content_flag = True
                 message["content"] = f'<think>\n{reasoning_content}\n</think>\n{message["content"]}'
     if reasoning_content_flag:
-        num_tokens = len(tokenizer.apply_chat_template(messages_copy, add_generation_prompt=True, thinking=True, tokenize=True))
+        num_tokens = len(tokenizer.apply_chat_template(messages_copy, add_generation_prompt=True, thinking=True, tokenize=True)["input_ids"])
     else:
-        num_tokens = len(tokenizer.apply_chat_template(messages_copy, add_generation_prompt=True, tokenize=True))
+        num_tokens = len(tokenizer.apply_chat_template(messages_copy, add_generation_prompt=True, tokenize=True)["input_ids"])
     return num_tokens
 
 
@@ -797,11 +797,12 @@ class LiteLLMModel(AbstractModel):
         output_tokens = 0
         for i in range(n_choices):
             output = choices[i].message.content or ""
-            output_tokens += litellm.utils.token_counter(
-                text=output,
-                model=self.custom_tokenizer["identifier"] if self.custom_tokenizer is not None else self.config.name,
-                custom_tokenizer=self.custom_tokenizer,
-            )
+            # output_tokens += litellm.utils.token_counter(
+            #     text=output,
+            #     model=self.custom_tokenizer["identifier"] if self.custom_tokenizer is not None else self.config.name,
+            #     custom_tokenizer=self.custom_tokenizer,
+            # )
+            output_tokens += response.usage.completion_tokens // n_choices
             output_dict = {"message": output}
             if self.tools.use_function_calling:
                 if response.choices[i].message.tool_calls:  # type: ignore
