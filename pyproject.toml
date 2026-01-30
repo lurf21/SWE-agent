@@ -57,7 +57,7 @@ dependencies = [
     "litellm",
     "GitPython",
     "ghapi",
-    "swe-rex>=1.4.0",
+    "swe-rex @ git+https://github.com/lurf21/SWE-ReX.git@patch",
     "tabulate",
     "textual>=1.0.0",
     "requests",
