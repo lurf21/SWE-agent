@@ -14,6 +14,7 @@ from typing import Annotated, Any, Literal
 
 import litellm
 import litellm.types.utils
+from transformers import AutoTokenizer
 from pydantic import BaseModel as PydanticBaseModel
 from pydantic import ConfigDict, Field, SecretStr
 from swerex.exceptions import SwerexException
@@ -50,6 +51,25 @@ litellm.suppress_debug_info = True
 
 _THREADS_THAT_USED_API_KEYS = []
 """Keeps track of thread orders so that we can choose the same API key for the same thread."""
+
+
+def count_token_num(messages: list[dict[str, str]], tokenizer: AutoTokenizer) -> int:
+    messages_copy = copy.deepcopy(messages)
+    reasoning_content_flag = False
+    for message in messages_copy:
+        role = message["role"]
+        if (role == "user" or role == "tool") and isinstance(message["content"], list):
+            message["content"] = "".join(msg["text"] for msg in message["content"] if msg["type"] == "text")
+        if role == "assistant":
+            reasoning_content = message.get("reasoning_content", "")
+            if reasoning_content:
+                reasoning_content_flag = True
+                message["content"] = f'<think>\n{reasoning_content}\n</think>\n{message["content"]}'
+    if reasoning_content_flag:
+        num_tokens = len(tokenizer.apply_chat_template(messages_copy, add_generation_prompt=True, thinking=True, tokenize=True))
+    else:
+        num_tokens = len(tokenizer.apply_chat_template(messages_copy, add_generation_prompt=True, tokenize=True))
+    return num_tokens
 
 
 class RetryConfig(PydanticBaseModel):
@@ -622,7 +642,10 @@ class LiteLLMModel(AbstractModel):
         self.lm_provider = litellm.model_cost.get(self.config.name, {}).get("litellm_provider", self.config.name)
         self.custom_tokenizer = None
         if self.config.custom_tokenizer is not None:
-            self.custom_tokenizer = litellm.utils.create_pretrained_tokenizer(**self.config.custom_tokenizer)
+            # self.custom_tokenizer = litellm.utils.create_pretrained_tokenizer(**self.config.custom_tokenizer)
+            tokenizer_identifier = self.config.custom_tokenizer["identifier"]
+            tokenizer = AutoTokenizer.from_pretrained(tokenizer_identifier, trust_remote_code=True)
+            self.custom_tokenizer = {"type": "huggingface_tokenizer", "identifier": tokenizer_identifier, "tokenizer": tokenizer}
 
     @property
     def instance_cost_limit(self) -> float:
@@ -687,10 +710,17 @@ class LiteLLMModel(AbstractModel):
                 del message["cache_control"]
             if "thinking_blocks" in message:
                 del message["thinking_blocks"]
-        input_tokens: int = litellm.utils.token_counter(
+        # input_tokens: int = litellm.utils.token_counter(
+        #     messages=messages_no_cache_control,
+        #     model=self.custom_tokenizer["identifier"] if self.custom_tokenizer is not None else self.config.name,
+        #     custom_tokenizer=self.custom_tokenizer,
+        # )
+        input_tokens: int = count_token_num(
             messages=messages_no_cache_control,
-            model=self.custom_tokenizer["identifier"] if self.custom_tokenizer is not None else self.config.name,
-            custom_tokenizer=self.custom_tokenizer,
+            tokenizer=self.custom_tokenizer["tokenizer"] if self.custom_tokenizer is not None else AutoTokenizer.from_pretrained(
+                self.config.name,
+                trust_remote_code=True,
+            ),
         )
         if self.model_max_input_tokens is None:
             msg = (
@@ -698,9 +728,24 @@ class LiteLLMModel(AbstractModel):
                 "If you are using a local model, you can set `max_input_token` in the model config to override this."
             )
             self.logger.warning(msg)
-        elif input_tokens > self.model_max_input_tokens > 0:
-            msg = f"Input tokens {input_tokens} exceed max tokens {self.model_max_input_tokens}"
-            raise ContextWindowExceededError(msg)
+        elif self.model_max_input_tokens > 0:
+            long_messages = copy.deepcopy(messages)
+            long_messages_no_cache_control = copy.deepcopy(messages_no_cache_control)
+
+            while input_tokens > self.model_max_input_tokens and len(long_messages) > 2:
+                long_messages.pop(2)
+                long_messages_no_cache_control.pop(2)
+                input_tokens = count_token_num(
+                    messages=long_messages_no_cache_control,
+                    tokenizer=self.custom_tokenizer["tokenizer"] if self.custom_tokenizer is not None else AutoTokenizer.from_pretrained(
+                        self.config.name,
+                        trust_remote_code=True,
+                    ),
+                )
+            if input_tokens > self.model_max_input_tokens:
+                msg = f"Input tokens {input_tokens} exceed max tokens {self.model_max_input_tokens}"
+                raise ContextWindowExceededError(msg)
+            messages = long_messages
         extra_args = {}
         if self.config.api_base:
             # Not assigned a default value in litellm, so only pass this if it's set
