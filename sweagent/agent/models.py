@@ -41,7 +41,7 @@ from sweagent.tools.tools import ToolConfig
 from sweagent.types import History, HistoryItem
 from sweagent.utils.log import get_logger
 
-from encoding_dsv32 import encode_messages
+from sweagent.agent.encoding_dsv32 import encode_messages
 
 try:
     import readline  # noqa: F401
