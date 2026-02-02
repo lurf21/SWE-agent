@@ -41,6 +41,8 @@ from sweagent.tools.tools import ToolConfig
 from sweagent.types import History, HistoryItem
 from sweagent.utils.log import get_logger
 
+from encoding_dsv32 import encode_messages
+
 try:
     import readline  # noqa: F401
 except ImportError:
@@ -54,19 +56,16 @@ _THREADS_THAT_USED_API_KEYS = []
 
 
 def count_token_num(messages: list[dict[str, str]], tokenizer: AutoTokenizer) -> int:
+    num_tokens = 0
     messages_copy = copy.deepcopy(messages)
-    reasoning_content_flag = False
-    for message in messages_copy:
-        role = message["role"]
-        if (role == "user" or role == "tool") and isinstance(message["content"], list):
-            message["content"] = "".join(msg["text"] for msg in message["content"] if msg["type"] == "text")
-        if role == "assistant":
-            reasoning_content = message.get("reasoning_content", "")
-            if reasoning_content:
-                reasoning_content_flag = True
-                message["content"] = f'<think>\n{reasoning_content}\n</think>\n{message["content"]}'
-    if reasoning_content_flag:
-        num_tokens = len(tokenizer.apply_chat_template(messages_copy, add_generation_prompt=True, thinking=True, tokenize=True)["input_ids"])
+    if tokenizer.name_or_path == "deepseek-ai/DeepSeek-V3.2":
+        encode_config = {
+            "thinking_mode": "thinking",
+            "drop_thinking": False,
+            "add_default_bos_token": True,
+        }
+        encoded_messages = encode_messages(messages_copy, **encode_config)
+        num_tokens = len(tokenizer.encode(encoded_messages))
     else:
         num_tokens = len(tokenizer.apply_chat_template(messages_copy, add_generation_prompt=True, tokenize=True)["input_ids"])
     return num_tokens
