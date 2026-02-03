@@ -14,6 +14,7 @@ from typing import Annotated, Any, Literal
 
 import litellm
 import litellm.types.utils
+from numpy import isin
 from transformers import AutoTokenizer
 from pydantic import BaseModel as PydanticBaseModel
 from pydantic import ConfigDict, Field, SecretStr
@@ -54,11 +55,47 @@ litellm.suppress_debug_info = True
 _THREADS_THAT_USED_API_KEYS = []
 """Keeps track of thread orders so that we can choose the same API key for the same thread."""
 
+def process_message(messages):
+    messages = copy.deepcopy(messages)
 
-def count_token_num(messages: list[dict[str, str]], tokenizer: AutoTokenizer) -> int:
+    new_messages = []
+    for msg in messages:
+        role = msg["role"]
+        if role == "tool":
+            message = {
+                "role": role,
+                "content": msg["content"],
+                "tool_call_id": msg["tool_call_id"]
+            }
+        elif (tool_calls := msg.get("tool_calls")) is not None:
+            message = {
+                "role": role,
+                "content": msg["content"],
+                "tool_calls": tool_calls
+            }
+            if thinking_blocks := msg.get("thinking_blocks"):
+                message["thinking_blocks"] = thinking_blocks
+            if reasoning_content := msg.get("reasoning_content"):
+                message["reasoning_content"] = reasoning_content
+        else:
+            message = {"role": role, "content": msg["content"]}
+            if reasoning_content := msg.get("reasoning_content"):
+                message["reasoning_content"] = reasoning_content
+        
+        if isinstance(message["content"], list):
+            message["content"] = message["content"][0]["text"]
+        
+        new_messages.append(message)
+    return new_messages
+            
+
+def count_token_num(messages: list[dict[str, str]], tokenizer: AutoTokenizer, tools) -> int:
     num_tokens = 0
     messages_copy = copy.deepcopy(messages)
+    messages_copy = process_message(messages_copy)
+
     if tokenizer.name_or_path == "deepseek-ai/DeepSeek-V3.2":
+        messages_copy[0]["tools"] = tools
         encode_config = {
             "thinking_mode": "thinking",
             "drop_thinking": False,
@@ -67,7 +104,7 @@ def count_token_num(messages: list[dict[str, str]], tokenizer: AutoTokenizer) ->
         encoded_messages = encode_messages(messages_copy, **encode_config)
         num_tokens = len(tokenizer.encode(encoded_messages))
     else:
-        num_tokens = len(tokenizer.apply_chat_template(messages_copy, add_generation_prompt=True, tokenize=True)["input_ids"])
+        num_tokens = len(tokenizer.apply_chat_template(messages_copy, tools=tools, add_generation_prompt=True, tokenize=True)["input_ids"])
     return num_tokens
 
 
@@ -720,6 +757,7 @@ class LiteLLMModel(AbstractModel):
                 self.config.name,
                 trust_remote_code=True,
             ),
+            tools = self.tools.tools
         )
         if self.model_max_input_tokens is None:
             msg = (
@@ -740,6 +778,7 @@ class LiteLLMModel(AbstractModel):
                         self.config.name,
                         trust_remote_code=True,
                     ),
+                    tools = self.tools.tools
                 )
             if input_tokens > self.model_max_input_tokens:
                 msg = f"Input tokens {input_tokens} exceed max tokens {self.model_max_input_tokens}"
