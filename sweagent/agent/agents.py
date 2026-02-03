@@ -724,6 +724,7 @@ class DefaultAgent(AbstractAgent):
                 "message_type": "action",
                 "thinking_blocks": step.thinking_blocks,
                 "reasoning_content": step.reasoning_content,
+                "encrypted_content": step.encrypted_content,
             },
         )
 
@@ -1046,6 +1047,7 @@ class DefaultAgent(AbstractAgent):
             step.thought, step.action = self.tools.parse_actions(output)
             step.thinking_blocks = output.get("thinking_blocks", [])
             step.reasoning_content = output.get("reasoning_content", "")
+            step.encrypted_content = output.get("encrypted_content", "")
             if output.get("tool_calls") is not None:
                 step.tool_call_ids = [call["id"] for call in output["tool_calls"]]
                 step.tool_calls = output["tool_calls"]
