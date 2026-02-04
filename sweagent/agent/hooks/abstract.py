@@ -118,6 +118,7 @@ class CombinedAgentHook(AbstractAgentHook):
         tool_call_ids: list[str] | None = None,
         thinking_blocks: list[dict[str, str]] | None = None,
         reasoning_content: str = "",
+        encrypted_content: str = "",
     ):
         for hook in self.hooks:
             hook.on_query_message_added(

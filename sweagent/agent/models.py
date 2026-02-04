@@ -860,6 +860,9 @@ class LiteLLMModel(AbstractModel):
                 and response.choices[i].message.reasoning_content  # type: ignore
             ):
                 output_dict["reasoning_content"] = response.choices[i].message.reasoning_content  # type: ignore
+            provider_specific_fields = getattr(response.choices[i].message, "provider_specific_fields", {})
+            if provider_specific_fields.get("encrypted_content") is not None:
+                output_dict["encrypted_content"] = provider_specific_fields["encrypted_content"]
             outputs.append(output_dict)
         self._update_stats(input_tokens=input_tokens, output_tokens=output_tokens, cost=cost)
         return outputs
@@ -948,6 +951,8 @@ class LiteLLMModel(AbstractModel):
                     message["thinking_blocks"] = thinking_blocks
                 if reasoning_content := history_item.get("reasoning_content"):
                     message["reasoning_content"] = reasoning_content
+                if encrypted_content := history_item.get("encrypted_content"):
+                    message["encrypted_content"] = encrypted_content
             else:
                 message = {"role": role, "content": history_item["content"]}
                 if reasoning_content := history_item.get("reasoning_content"):
