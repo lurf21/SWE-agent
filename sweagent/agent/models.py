@@ -14,7 +14,6 @@ from typing import Annotated, Any, Literal
 
 import litellm
 import litellm.types.utils
-from numpy import isin
 from transformers import AutoTokenizer
 from pydantic import BaseModel as PydanticBaseModel
 from pydantic import ConfigDict, Field, SecretStr
@@ -91,6 +90,7 @@ def process_message(messages):
 
 def count_token_num(messages: list[dict[str, str]], tokenizer: AutoTokenizer, tools) -> int:
     num_tokens = 0
+
     messages_copy = copy.deepcopy(messages)
     messages_copy = process_message(messages_copy)
 
@@ -769,9 +769,10 @@ class LiteLLMModel(AbstractModel):
             long_messages = copy.deepcopy(messages)
             long_messages_no_cache_control = copy.deepcopy(messages_no_cache_control)
 
-            while input_tokens > self.model_max_input_tokens and len(long_messages) > 2:
-                long_messages.pop(2)
-                long_messages_no_cache_control.pop(2)
+            while input_tokens > self.model_max_input_tokens and len(long_messages) > 3:
+                self.logger.debug(f"max tokens: {self.model_max_input_tokens}, current input tokens: {input_tokens}, del the message[2:4]")
+                del long_messages[2:4]
+                del long_messages_no_cache_control[2:4]
                 input_tokens = count_token_num(
                     messages=long_messages_no_cache_control,
                     tokenizer=self.custom_tokenizer["tokenizer"] if self.custom_tokenizer is not None else AutoTokenizer.from_pretrained(
