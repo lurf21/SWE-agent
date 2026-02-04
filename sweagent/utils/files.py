@@ -14,9 +14,9 @@ def load_file(path: Path | str | None) -> Any:
     if not path.exists():
         raise FileNotFoundError(path)
     if path.is_dir():
-        from datasets import load_from_disk
-
-        return load_from_disk(path)
+        from datasets import load_dataset
+        path_str=str(path)
+        return load_dataset('parquet',data_files=path_str+'/*.parquet',split='train')
     if path.suffix in [".json", ".traj"]:
         return json.loads(path.read_text())
     if path.suffix == ".jsonl":

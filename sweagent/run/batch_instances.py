@@ -397,7 +397,7 @@ class SWESmithInstances(BaseModel, AbstractInstanceSource):
             instance_dict["base_commit"] = instance_dict["id"]
             instance_dict["problem_statement"] = instance_dict.get("problem_statement", "")
             instance_dict["repo_name"] = "testbed"
-            instance_dict["extra_fields"] = {"fail_to_pass": instance_dict["FAIL_TO_PASS"]}
+            instance_dict["extra_fields"] = {"fail_to_pass": instance_dict["FAIL_TO_PASS"], "pass_to_pass":instance_dict["PASS_TO_PASS"]}
             return instance_dict
 
         instance_dicts = load_file(self.path)
